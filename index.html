@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Quantum Paradox | GitHub Edition</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #ui { position: absolute; top: 20px; left: 20px; color: #00ffcc; pointer-events: none; }
+        .card { background: rgba(0, 10, 20, 0.8); padding: 15px; border: 1px solid #00ffcc; border-radius: 5px; box-shadow: 0 0 15px rgba(0,255,204,0.3); }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; border: 1px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); }
+        #msg { position: absolute; bottom: 10%; width: 100%; text-align: center; color: #fff; font-size: 1.5em; text-shadow: 0 0 10px #000; display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="card">
+            <h2 style="margin:0; font-size: 1.2em;">ESTACIÓN CUÁNTICA C.E.R.N.</h2>
+            <p id="objective">Objetivo: Localiza al Dr. Schrödinger</p>
+            <small>[W,A,S,D] Moverse | [E] Interactuar | [F] Linterna</small>
+        </div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="msg"></div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com", "three/addons/": "https://unpkg.com" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- ESCENA Y RENDER ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x00050a, 0.05);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // --- GENERACIÓN DE TEXTURA METÁLICA (Procedural) ---
+        const canvas = document.createElement('canvas');
+        canvas.width = 256; canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#111'; ctx.fillRect(0,0,256,256);
+        ctx.strokeStyle = '#222';
+        for(let i=0; i<256; i+=16) { ctx.strokeRect(i, 0, 1, 256); ctx.strokeRect(0, i, 256, 1); }
+        const metalTexture = new THREE.CanvasTexture(canvas);
+        metalTexture.wrapS = metalTexture.wrapT = THREE.RepeatWrapping;
+        metalTexture.repeat.set(50, 50);
+
+        // --- LUCES ---
+        const light1 = new THREE.PointLight(0x0066ff, 50, 50);
+        light1.position.set(10, 10, 10);
+        scene.add(light1);
+
+        const flashlight = new THREE.SpotLight(0xffffff, 100);
+        flashlight.angle = Math.PI / 6;
+        flashlight.penumbra = 0.3;
+        flashlight.castShadow = true;
+        camera.add(flashlight);
+        flashlight.position.set(0,0,0);
+        flashlight.target.position.set(0,0,-1);
+        camera.add(flashlight.target);
+        scene.add(camera);
+
+        // --- LABORATORIO GIGANTE ---
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(200, 200),
+            new THREE.MeshStandardMaterial({ map: metalTexture, metalness: 0.8, roughness: 0.2 })
+        );
+        floor.rotation.x = -Math.PI/2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Paredes con "Luces Neón"
+        const createWall = (w, h, d, x, y, z) => {
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: 0x050505 }));
+            wall.position.set(x, y, z);
+            wall.receiveShadow = true;
+            scene.add(wall);
+            // Neon
+            const neon = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
+            neon.position.set(x, y + 2, z + 0.51);
+            scene.add(neon);
+        };
+        createWall(100, 15, 1, 0, 7.5, -30);
+
+        // --- NPC: DR. SCHRÖDINGER (Holograma) ---
+        const npc = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true }));
+        npc.add(body);
+        npc.position.set(0, 1.2, -10);
+        scene.add(npc);
+
+        // --- EL GATO (Caja Cuántica) ---
+        const box = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 1 }));
+        box.position.set(-15, 0.75, -20);
+        box.castShadow = true;
+        scene.add(box);
+
+        // --- LÓGICA DE JUEGO ---
+        let mission = 0;
+        const controls = new PointerLockControls(camera, document.body);
+        document.addEventListener('click', () => controls.lock());
+
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if(e.code === 'KeyE') interact();
+            if(e.code === 'KeyF') flashlight.visible = !flashlight.visible;
+        });
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        function interact() {
+            const distNPC = camera.position.distanceTo(npc.position);
+            const distBox = camera.position.distanceTo(box.position);
+
+            if(distNPC < 4 && mission === 0) {
+                mission = 1;
+                document.getElementById('objective').innerText = "Objetivo: Abre la caja del experimento.";
+                showMsg("SCHRÖDINGER: '¿Ves esa caja? Mi gato está allí. O no. Ve a comprobarlo.'");
+            }
+            if(distBox < 3 && mission === 1) {
+                mission = 2;
+                box.material.color.set(0x00ff00);
+                document.getElementById('objective').innerText = "MISIÓN COMPLETADA";
+                showMsg("¡INCREÍBLE! El gato está vivo. Has ganado la partida.");
+            }
+        }
+
+        function showMsg(t) {
+            const m = document.getElementById('msg');
+            m.innerText = t; m.style.display = 'block';
+            setTimeout(() => m.style.display = 'none', 5000);
+        }
+
+        // --- LOOP PRINCIPAL ---
+        function animate() {
+            requestAnimationFrame(animate);
+            if(controls.isLocked) {
+                const speed = 0.12;
+                if(keys['KeyW']) controls.moveForward(speed);
+                if(keys['KeyS']) controls.moveForward(-speed);
+                if(keys['KeyA']) controls.moveRight(-speed);
+                if(keys['KeyD']) controls.moveRight(speed);
+            }
+            npc.rotation.y += 0.02; // Animación del PNJ
+            renderer.render(scene, camera);
+        }
+        animate();
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+    </script>
+</body>
+</html>
